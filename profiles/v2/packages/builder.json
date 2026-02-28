@@ -1,0 +1,102 @@
+{
+  "__version__": "1.3.9",
+  "log": {
+    "level": 1
+  },
+  "common": {
+    "binGroupConfig": {
+      "threshold": 16,
+      "enable": false
+    },
+    "polyfills": {
+      "asyncFunctions": true
+    }
+  },
+  "BuildTaskManager": {
+    "taskMap": {
+      "1772201297560": {
+        "type": "build",
+        "id": "1772201297560",
+        "progress": 1,
+        "state": "success",
+        "stage": "build",
+        "message": "2026-2-28 00:39:11 build success in 2 min 18 s!",
+        "detailMessage": "// ---- build task cocos-service：onAfterBuild ----\r",
+        "options": {
+          "name": "继续下一关 - Roguelike塔防",
+          "server": "",
+          "engineModulesConfigKey": "defaultConfig",
+          "platform": "web-desktop",
+          "buildPath": "project://build",
+          "debug": false,
+          "buildMode": "normal",
+          "mangleProperties": false,
+          "md5Cache": false,
+          "skipCompressTexture": false,
+          "sourceMaps": false,
+          "overwriteProjectSettings": {
+            "includeModules": {
+              "gfx-webgl2": "on",
+              "physics": "inherit-project-setting",
+              "physics-2d": "inherit-project-setting"
+            },
+            "macroConfig": {
+              "cleanupImageCache": "inherit-project-setting"
+            }
+          },
+          "nativeCodeBundleMode": "both",
+          "polyfills": {
+            "asyncFunctions": true
+          },
+          "experimentalEraseModules": false,
+          "startSceneAssetBundle": false,
+          "bundleConfigs": [],
+          "inlineEnum": true,
+          "useBuiltinServer": false,
+          "md5CacheOptions": {
+            "excludes": [],
+            "includes": [],
+            "replaceOnly": [],
+            "handleTemplateMd5Link": true
+          },
+          "mainBundleIsRemote": false,
+          "mainBundleCompressionType": "merge_dep",
+          "useSplashScreen": true,
+          "bundleCommonChunk": false,
+          "packAutoAtlas": true,
+          "startScene": "dbe52a0b-29c0-46fe-abf3-2e2ca22f7659",
+          "outputName": "web-desktop",
+          "taskName": "web-desktop",
+          "scenes": [
+            {
+              "url": "db://assets/scenes/BootScene.scene",
+              "uuid": "dbe52a0b-29c0-46fe-abf3-2e2ca22f7659"
+            },
+            {
+              "url": "db://assets/scenes/GameOverScene.scene",
+              "uuid": "97a05e78-5719-4f1d-a42f-503031c9d8b8"
+            },
+            {
+              "url": "db://assets/scenes/GameScene.scene",
+              "uuid": "f6388bc2-a898-49bf-a5db-9bb37e5ba687"
+            },
+            {
+              "url": "db://assets/scenes/MainMenuScene.scene",
+              "uuid": "cb1fe5fe-f1a3-44fc-a8d7-ccc9eb4b7e13"
+            }
+          ],
+          "wasmCompressionMode": false,
+          "binGroupConfig": {
+            "threshold": 16,
+            "enable": false
+          },
+          "packages": {},
+          "__version__": "1.3.9",
+          "logDest": "project://temp/builder/log/web-desktop2026-2-27 22-08.log"
+        },
+        "time": "2026-2-28 00:36:53",
+        "dirty": false
+      }
+    }
+  }
+}

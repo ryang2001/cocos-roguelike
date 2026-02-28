@@ -1,0 +1,25 @@
+{
+  "engine": "cocos-creator-js",
+  "packages": "packages",
+  "version": "3.8.0",
+  "id": "roguelike-tower-defense",
+  "name": "继续下一关 - Roguelike塔防",
+  "title": "继续下一关",
+  "creator": {
+    "version": "3.8.8",
+    "registry": {
+      "remote": {}
+    },
+    "dependencies": {
+      "localization-editor": "1.0.1"
+    }
+  },
+  "uuid": "3c37f739-d71b-4eca-8877-b9d07c37d503",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.3.1",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3"
+  }
+}

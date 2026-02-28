@@ -1,0 +1,30 @@
+# Cocos Creator build directories
+build/
+temp/
+library/
+local/
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.log.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp files
+*.tmp
+*.temp
+nul
+
+# Package manager
+package-lock.json
