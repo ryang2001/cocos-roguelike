@@ -184,9 +184,17 @@ export class GameSceneInitializer extends Component {
 
         // 添加Sprite组件并设置城堡贴图
         const sprite = castle.addComponent(Sprite);
-        resources.load(GameConfig.TEXTURE_PATHS.TOWERS.BASIC, SpriteFrame, (err, spriteFrame) => {
+        const towerPath = `${GameConfig.TEXTURE_PATHS.TOWERS.BASIC}/spriteFrame`;
+        resources.load(towerPath, SpriteFrame, (err, spriteFrame) => {
             if (!err && spriteFrame) {
                 sprite.spriteFrame = spriteFrame;
+            } else {
+                // 尝试不加后缀
+                resources.load(GameConfig.TEXTURE_PATHS.TOWERS.BASIC, SpriteFrame, (err2, spriteFrame2) => {
+                    if (!err2 && spriteFrame2) {
+                        sprite.spriteFrame = spriteFrame2;
+                    }
+                });
             }
         });
 

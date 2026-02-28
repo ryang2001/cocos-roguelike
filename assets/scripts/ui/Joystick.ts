@@ -3,7 +3,7 @@
  * 点击位置创建摇杆，手指抬起后摇杆消失
  */
 
-import { _decorator, Component, Node, Vec3, Vec2, EventTouch, UITransform, Color, Layers, Graphics } from 'cc';
+import { _decorator, Component, Node, Vec3, Vec2, EventTouch, UITransform, Color, Layers, Sprite, SpriteFrame, Texture2D, ImageAsset } from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -95,9 +95,13 @@ export class Joystick extends Component {
 
     /**
      * 创建摇杆UI
-     * 只创建视觉元素（背景和控制点），触摸事件注册在父节点上
+     * 使用Sprite替代Graphics避免WebGL渲染问题
      */
     private createJoystickUI(): void {
+        // 创建圆形纹理
+        const bgSpriteFrame = this.createCircleTexture(this.bgColor, this.maxRadius * 2);
+        const stickSpriteFrame = this.createCircleTexture(this.stickColor, this.maxRadius * 0.6);
+
         // 创建背景
         this._bgNode = new Node('JoystickBg');
         this._bgNode.layer = Layers.Enum.UI_2D;
@@ -106,13 +110,11 @@ export class Joystick extends Component {
         const bgTransform = this._bgNode.addComponent(UITransform);
         bgTransform.setContentSize(this.maxRadius * 2, this.maxRadius * 2);
 
-        const bgGraphics = this._bgNode.addComponent(Graphics);
-        bgGraphics.fillColor = this.bgColor;
-        bgGraphics.strokeColor = new Color(50, 100, 200, 255);
-        bgGraphics.lineWidth = 4;
-        bgGraphics.circle(0, 0, this.maxRadius - 2);
-        bgGraphics.fill();
-        bgGraphics.stroke();
+        // 使用Sprite显示背景
+        const bgSprite = this._bgNode.addComponent(Sprite);
+        bgSprite.spriteFrame = bgSpriteFrame;
+        bgSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        bgSprite.color = Color.WHITE; // 纹理已包含颜色
 
         // 创建控制点
         this._stickNode = new Node('JoystickStick');
@@ -122,13 +124,49 @@ export class Joystick extends Component {
         const stickTransform = this._stickNode.addComponent(UITransform);
         stickTransform.setContentSize(this.maxRadius * 0.6, this.maxRadius * 0.6);
 
-        const stickGraphics = this._stickNode.addComponent(Graphics);
-        stickGraphics.fillColor = this.stickColor;
-        stickGraphics.strokeColor = new Color(200, 200, 200, 255);
-        stickGraphics.lineWidth = 3;
-        stickGraphics.circle(0, 0, this.maxRadius * 0.3 - 2);
-        stickGraphics.fill();
-        stickGraphics.stroke();
+        // 使用Sprite显示控制点
+        const stickSprite = this._stickNode.addComponent(Sprite);
+        stickSprite.spriteFrame = stickSpriteFrame;
+        stickSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        stickSprite.color = Color.WHITE; // 纹理已包含颜色
+    }
+
+    /**
+     * 创建圆形纹理
+     */
+    private createCircleTexture(color: Color, size: number): SpriteFrame {
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            return new SpriteFrame();
+        }
+
+        // 清空画布
+        ctx.clearRect(0, 0, size, size);
+
+        // 绘制圆形
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${color.a / 255})`;
+        ctx.fill();
+
+        // 绘制边框
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 创建纹理
+        const imageAsset = new ImageAsset(canvas);
+        const texture = new Texture2D();
+        texture.image = imageAsset;
+
+        const spriteFrame = new SpriteFrame();
+        spriteFrame.texture = texture;
+        spriteFrame.rect = { x: 0, y: 0, width: size, height: size };
+
+        return spriteFrame;
     }
 
     // ==================== 事件处理 ====================
@@ -164,6 +202,21 @@ export class Joystick extends Component {
     }
 
     /**
+     * 将UI坐标（左下角原点）转换为节点局部坐标（父节点锚点中心为原点）
+     */
+    private convertUIToLocal(uiX: number, uiY: number): Vec3 {
+        // 获取父节点（UICanvas）的尺寸
+        const parentTransform = this.node.parent?.getComponent(UITransform);
+        if (parentTransform) {
+            const halfWidth = parentTransform.contentSize.width / 2;
+            const halfHeight = parentTransform.contentSize.height / 2;
+            return new Vec3(uiX - halfWidth, uiY - halfHeight, 0);
+        }
+        // 默认使用设计分辨率
+        return new Vec3(uiX - 360, uiY - 640, 0);
+    }
+
+    /**
      * 触摸开始 - 在触摸位置显示摇杆
      */
     private onTouchStart(event: EventTouch): void {
@@ -172,11 +225,12 @@ export class Joystick extends Component {
         this._touchId = event.getID();
         this._isTouching = true;
 
-        // 获取相对于UICanvas的触摸坐标
-        const touchLocation = event.getLocation();
+        // 获取相对于UICanvas的触摸坐标（左下角原点）
+        const touchLocation = event.getUILocation();
 
-        // 直接使用相对于UICanvas的坐标（getLocation已返回相对坐标）
-        this._centerPos.set(touchLocation.x, touchLocation.y, 0);
+        // 转换为节点局部坐标（相对于父节点锚点中心）
+        const localPos = this.convertUIToLocal(touchLocation.x, touchLocation.y);
+        this._centerPos.set(localPos.x, localPos.y, 0);
 
         // 向GameManager报告鼠标点击位置和摇杆创建位置（用于Debug显示）
         if (this._onPositionCallback) {
@@ -211,13 +265,16 @@ export class Joystick extends Component {
     private onTouchMove(event: EventTouch): void {
         if (!this._isTouching || event.getID() !== this._touchId) return;
 
-        // 获取相对于UICanvas的触摸坐标
-        const touchLocation = event.getLocation();
+        // 获取相对于UICanvas的触摸坐标（左下角原点）
+        const touchLocation = event.getUILocation();
 
-        // 计算相对于摇杆中心的位置（直接使用相对坐标）
+        // 转换为节点局部坐标
+        const localPos = this.convertUIToLocal(touchLocation.x, touchLocation.y);
+
+        // 计算相对于摇杆中心的偏移
         const relativePos = new Vec2(
-            touchLocation.x - this._centerPos.x,
-            touchLocation.y - this._centerPos.y
+            localPos.x - this._centerPos.x,
+            localPos.y - this._centerPos.y
         );
 
         // 更新摇杆数据和控制点位置

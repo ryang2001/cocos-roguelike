@@ -10,6 +10,7 @@ import { AssetManager } from '../systems/AssetManager';
 import { MonsterManager } from '../systems/MonsterManager';
 import { MapGenerator } from '../world/MapGenerator';
 import { Joystick } from '../ui/Joystick';
+import { cartesianToIsometric } from '../utils/IsometricUtils';
 // 显式导入实体类以确保模块加载（预制体依赖）
 import { Player } from '../entities/Player';
 import { Monster } from '../entities/Monster';
@@ -56,6 +57,15 @@ export class GameManager extends Component {
     // 防止重复初始化
     private _isSceneInitialized: boolean = false;
 
+    // 帧计数器（用于调试）
+    private _frameCount: number = 0;
+
+    // 帧计数器
+    private _frameCount: number = 0;
+
+    // 帧计数器
+    private _frameCount: number = 0;
+
     // Prefab路径
     private readonly PREFAB_PATHS = {
         player: 'prefabs/Player',
@@ -80,6 +90,9 @@ export class GameManager extends Component {
      * 每帧更新
      */
     update(deltaTime: number): void {
+        // 增加帧计数
+        this._frameCount++;
+
         // 更新摄像机跟随玩家
         this.updateCameraFollow();
 
@@ -142,7 +155,10 @@ export class GameManager extends Component {
 
     /**
      * 更新摄像机跟随玩家
-     * 使用UICanvas的Camera
+     * 使用UICanvas的Camera - 适配2.5D等距视角
+     *
+     * 注意：在2.5D等距视角中，游戏逻辑使用笛卡尔坐标，相机跟随也使用笛卡尔坐标
+     * 等距效果由MapGenerator在渲染瓦片时处理
      */
     private updateCameraFollow(): void {
         if (!this._playerNode) return;
@@ -151,12 +167,31 @@ export class GameManager extends Component {
         const uiCamera = this._uiCanvas?.getComponent(Camera);
         if (!uiCamera) return;
 
-        // 获取玩家位置
+        // 获取玩家位置（笛卡尔坐标）
         const playerPos = this._playerNode.position;
 
-        // 设置Camera位置跟随玩家
+        // 设置Camera位置跟随玩家（直接使用笛卡尔坐标）
         const cameraNode = uiCamera.node;
-        cameraNode.setPosition(playerPos.x, playerPos.y, cameraNode.position.z);
+
+        // 保持z轴位置不变（摄像机高度）
+        const cameraZ = cameraNode.position.z;
+
+        // 摄像机平滑跟随玩家
+        const currentPos = cameraNode.position;
+        const targetX = playerPos.x;
+        const targetY = playerPos.y;
+
+        // 简单的平滑插值
+        const smoothFactor = 0.1;
+        const newX = currentPos.x + (targetX - currentPos.x) * smoothFactor;
+        const newY = currentPos.y + (targetY - currentPos.y) * smoothFactor;
+
+        cameraNode.setPosition(newX, newY, cameraZ);
+
+        // 调试信息（每60帧打印一次）
+        if (this._frameCount % 60 === 0) {
+            console.log(`[Camera] Pos: (${newX.toFixed(0)}, ${newY.toFixed(0)}), Player: (${playerPos.x.toFixed(0)}, ${playerPos.y.toFixed(0)})`);
+        }
     }
 
     /**
@@ -405,6 +440,9 @@ export class GameManager extends Component {
         // 加载Prefab
         await this.loadPrefabs();
 
+        // 调试：打印已加载的预制体
+        console.log('[GameManager] 已加载的预制体:', Array.from(this._prefabCache.keys()));
+
         // 创建系统管理器节点
         this.createSystemManagers();
 
@@ -439,9 +477,20 @@ export class GameManager extends Component {
         const worldTransform = this._worldNode.addComponent(UITransform);
         worldTransform.setContentSize(GameConfig.WORLD_WIDTH, GameConfig.WORLD_HEIGHT);
 
-        // 挂载到场景（不再挂载到WorldCanvas）
-        scene.addChild(this._worldNode);
-        console.log('GameManager: World节点已挂载到场景');
+        // 查找或创建Canvas，将World节点作为Canvas的子节点
+        // UI元素（Sprite）必须在Canvas下才能正确显示
+        let canvasNode = scene.getChildByName('Canvas');
+        if (!canvasNode) {
+            canvasNode = new Node('Canvas');
+            canvasNode.layer = Layers.Enum.UI_2D;
+            const canvas = canvasNode.addComponent(Canvas);
+            const canvasTransform = canvasNode.addComponent(UITransform);
+            canvasTransform.setContentSize(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
+            scene.addChild(canvasNode);
+            console.log('GameManager: Canvas节点已创建');
+        }
+        canvasNode.addChild(this._worldNode);
+        console.log('GameManager: World节点已挂载到Canvas');
     }
 
     /**
@@ -488,13 +537,16 @@ export class GameManager extends Component {
         monsterManagerNode.layer = Layers.Enum.UI_2D;
         this._worldNode.addChild(monsterManagerNode);
 
-        // 添加 MonsterManager 组件并设置 prefab
-        const monsterManager = monsterManagerNode.addComponent('MonsterManager') as any;
+        // 添加 MonsterManager 组件（使用类引用而非字符串）
+        const monsterManager = monsterManagerNode.addComponent(MonsterManager);
         if (monsterManager) {
             const monsterPrefab = this._prefabCache.get('monster');
             if (monsterPrefab) {
                 monsterManager.monsterPrefab = monsterPrefab;
-                console.log('GameManager: MonsterManager 已创建并设置预制体');
+                console.log('[GameManager] MonsterManager 已创建并设置预制体');
+            } else {
+                // 如果没有预制体，MonsterManager 会在 initPool 中创建基础节点
+                console.warn('[GameManager] 怪物预制体未找到，MonsterManager 将使用基础节点');
             }
         }
     }
@@ -628,12 +680,9 @@ export class GameManager extends Component {
         this._playerNode = instantiate(playerPrefab);
         this._playerNode.name = 'Player';
 
-        // 设置玩家位置（世界中心）
-        const worldCenter = new Vec3(
-            GameConfig.WORLD_WIDTH / 2,
-            GameConfig.WORLD_HEIGHT / 2,
-            0
-        );
+        // 设置玩家位置（世界中心 - 2.5D等距视角中心为原点）
+        // 注意：玩家位置使用笛卡尔坐标，z轴保持为0
+        const worldCenter = new Vec3(0, 0, 0); // 等距视角中心在原点
         this._playerNode.setPosition(worldCenter);
 
         // 添加到世界
@@ -762,16 +811,26 @@ export class GameManager extends Component {
             console.log('GameManager: 创建UICanvas（自动创建Camera）');
         }
 
-        // 配置UICanvas的Camera
+        // 配置UICanvas的Camera - 适配2.5D等距视角
         const uiCamera = uiCanvasNode.getComponent(Camera);
         if (uiCamera) {
             uiCamera.projection = Camera.ProjectionType.ORTHO;
-            uiCamera.orthoHeight = GameConfig.DESIGN_HEIGHT / 2;
+            // 调整视野范围以显示更多地图（2.5D视角需要更大视野）
+            uiCamera.orthoHeight = GameConfig.DESIGN_HEIGHT / 1.5; // 增加视野范围
             uiCamera.near = 0.1;
             uiCamera.far = 10000;
+            // 确保能看到所有层（UI_2D层包含地图和角色）
             uiCamera.visibility = Layers.Enum.UI_2D;
             uiCamera.priority = 0;
-            console.log('GameManager: UICanvas Camera已配置');
+
+            // 设置摄像机初始位置到世界中心（等距视角下是原点）
+            // 在2.5D等距视角中，地图以(0,0)为中心分布
+            const worldCenter = new Vec3(0, 0, 1000); // 摄像机在原点上方
+            uiCamera.node.setPosition(worldCenter);
+
+            console.log('GameManager: UICanvas Camera已配置（2.5D等距视角）');
+            console.log(`  - 视野范围: ${uiCamera.orthoHeight}`);
+            console.log(`  - 初始位置: (${worldCenter.x}, ${worldCenter.y}, ${worldCenter.z})`);
         }
 
         // ========== 第2步：删除MainCamera和WorldCanvas（保留编辑器Camera）==========
@@ -858,18 +917,22 @@ export class GameManager extends Component {
 
         // 添加Sprite组件并设置城堡贴图
         const sprite = castle.addComponent(Sprite);
-        resources.load(GameConfig.TEXTURE_PATHS.TOWERS.BASIC + '/spriteFrame', SpriteFrame, (err, spriteFrame) => {
+        const towerPath = `${GameConfig.TEXTURE_PATHS.TOWERS.BASIC}/spriteFrame`;
+        resources.load(towerPath, SpriteFrame, (err, spriteFrame) => {
             if (!err && spriteFrame) {
                 sprite.spriteFrame = spriteFrame;
+            } else {
+                // 尝试不加后缀
+                resources.load(GameConfig.TEXTURE_PATHS.TOWERS.BASIC, SpriteFrame, (err2, spriteFrame2) => {
+                    if (!err2 && spriteFrame2) {
+                        sprite.spriteFrame = spriteFrame2;
+                    }
+                });
             }
         });
 
-        // 设置城堡位置（玩家附近）
-        const castlePos = new Vec3(
-            GameConfig.WORLD_WIDTH / 2 - 200,
-            GameConfig.WORLD_HEIGHT / 2,
-            0
-        );
+        // 设置城堡位置（玩家附近 - 原点左侧）
+        const castlePos = new Vec3(-200, 0, 0);
         castle.setPosition(castlePos);
 
         if (this._worldNode) {
@@ -889,13 +952,13 @@ export class GameManager extends Component {
             return;
         }
 
-        // 创建不同类型的测试怪物
+        // 创建不同类型的测试怪物（以原点为中心）
         const monsterTypes = ['slime', 'goblin', 'skeleton', 'wolf'];
         const positions = [
-            new Vec3(GameConfig.WORLD_WIDTH / 2 + 300, GameConfig.WORLD_HEIGHT / 2, 0),
-            new Vec3(GameConfig.WORLD_WIDTH / 2 + 400, GameConfig.WORLD_HEIGHT / 2 + 100, 0),
-            new Vec3(GameConfig.WORLD_WIDTH / 2 + 500, GameConfig.WORLD_HEIGHT / 2 - 100, 0),
-            new Vec3(GameConfig.WORLD_WIDTH / 2 + 600, GameConfig.WORLD_HEIGHT / 2, 0),
+            new Vec3(300, 0, 0),
+            new Vec3(400, 100, 0),
+            new Vec3(500, -100, 0),
+            new Vec3(600, 0, 0),
         ];
 
         for (let i = 0; i < monsterTypes.length; i++) {
@@ -928,11 +991,11 @@ export class GameManager extends Component {
             return;
         }
 
-        // 在城堡周围创建几个炮台
+        // 在原点周围创建几个炮台
         const towerPositions = [
-            new Vec3(GameConfig.WORLD_WIDTH / 2 - 300, GameConfig.WORLD_HEIGHT / 2 + 150, 0),
-            new Vec3(GameConfig.WORLD_WIDTH / 2 - 300, GameConfig.WORLD_HEIGHT / 2 - 150, 0),
-            new Vec3(GameConfig.WORLD_WIDTH / 2 - 100, GameConfig.WORLD_HEIGHT / 2 + 200, 0),
+            new Vec3(-300, 150, 0),
+            new Vec3(-300, -150, 0),
+            new Vec3(-100, 200, 0),
         ];
 
         for (let i = 0; i < towerPositions.length; i++) {

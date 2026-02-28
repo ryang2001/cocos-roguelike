@@ -3,8 +3,9 @@
  * 负责怪物的 AI、移动、攻击和掉落
  */
 
-import { _decorator, Component, Node, Vec3, Sprite, Color, resources, SpriteFrame } from 'cc';
+import { _decorator, Component, Node, Vec3, Sprite, Color, resources, SpriteFrame, UITransform } from 'cc';
 import { GameConfig } from '../config/GameConfig';
+import { calculateDepth } from '../utils/IsometricUtils';
 import {
     IMonster,
     IMonsterConfig,
@@ -103,6 +104,14 @@ export class Monster extends Component implements ICombatEntity {
     // ==================== 生命周期 ====================
 
     onLoad() {
+        // 确保节点有UITransform组件（UI渲染必需）
+        let uiTransform = this.node.getComponent(UITransform);
+        if (!uiTransform) {
+            uiTransform = this.node.addComponent(UITransform);
+            uiTransform.setContentSize(64, 64); // 默认怪物大小
+            console.log(`[Monster] ${this.monsterType} 添加UITransform组件`);
+        }
+
         // 初始化怪物数据
         this._monsterData = this.createMonsterData();
 
@@ -141,23 +150,33 @@ export class Monster extends Component implements ICombatEntity {
             return;
         }
 
-        // 动态加载精灵图
-        resources.load(texturePath, SpriteFrame, (err, spriteFrame) => {
-            if (err) {
-                console.warn(`Monster: 加载精灵图失败 ${texturePath}`, err.message);
-                // 加载失败时使用默认颜色
-                this.updateMonsterColor();
+        // 动态加载精灵图（Cocos 3.x 需要加上 /spriteFrame 后缀）
+        const spriteFramePath = `${texturePath}/spriteFrame`;
+        resources.load(spriteFramePath, SpriteFrame, (err, spriteFrame) => {
+            if (err || !spriteFrame) {
+                console.warn(`Monster: 加载精灵图失败 ${spriteFramePath}，尝试不加后缀...`);
+                // 尝试不加后缀
+                resources.load(texturePath, SpriteFrame, (err2, spriteFrame2) => {
+                    if (err2 || !spriteFrame2) {
+                        console.warn(`Monster: 二次加载也失败，使用默认颜色`);
+                        this.updateMonsterColor();
+                        return;
+                    }
+                    sprite.spriteFrame = spriteFrame2;
+                    console.log(`Monster: 成功加载精灵图（无后缀） ${texturePath}`);
+                    if (this.isElite) {
+                        sprite.color = new Color(255, 255, 255, 255);
+                    }
+                });
                 return;
             }
 
-            if (spriteFrame) {
-                sprite.spriteFrame = spriteFrame;
-                console.log(`Monster: 成功加载精灵图 ${texturePath}`);
+            sprite.spriteFrame = spriteFrame;
+            console.log(`Monster: 成功加载精灵图 ${spriteFramePath}`);
 
-                // 精英怪添加发光效果（通过调整颜色）
-                if (this.isElite) {
-                    sprite.color = new Color(255, 255, 255, 255);
-                }
+            // 精英怪添加发光效果（通过调整颜色）
+            if (this.isElite) {
+                sprite.color = new Color(255, 255, 255, 255);
             }
         });
     }
@@ -172,6 +191,9 @@ export class Monster extends Component implements ICombatEntity {
 
     update(deltaTime: number) {
         if (this._isDead) return;
+
+        // 更新深度排序（2.5D等距视角）
+        this.updateDepthSorting();
 
         switch (this._state) {
             case MonsterState.IDLE:
@@ -426,8 +448,22 @@ export class Monster extends Component implements ICombatEntity {
     // ==================== IDLE 状态 ====================
 
     /**
-     * 更新空闲状态
+     * 更新深度排序（2.5D等距视角）
+     * 根据Y坐标调整z轴，实现正确的遮挡关系
      */
+    private updateDepthSorting(): void {
+        // 计算深度值（Y坐标越大，越靠前渲染）
+        const depth = calculateDepth(this.node.position.y, this.node.position.x);
+
+        // 更新z轴位置（Cocos中z越大越靠前）
+        if (this.node.position.z !== depth) {
+            this.node.setPosition(
+                this.node.position.x,
+                this.node.position.y,
+                depth
+            );
+        }
+    }
     private updateIdle(deltaTime: number): void {
         // 检测范围内是否有玩家
         this.findTarget();

@@ -11,7 +11,7 @@
  * - SWAMP: 沼泽 - 每秒3点毒伤害
  */
 
-import { _decorator, Component, Vec3, Rect, Color, Graphics, Node } from 'cc';
+import { _decorator, Component, Vec3, Rect, Color, Node } from 'cc';
 import { ElementType } from '../types/Types';
 import { Player } from '../entities/Player';
 import { Monster } from '../entities/Monster';

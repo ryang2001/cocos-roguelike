@@ -68,16 +68,27 @@ export class AssetManager extends Component {
             return this._loadingPromises.get(path) as Promise<SpriteFrame>;
         }
 
-        // 创建加载Promise
+        // 创建加载Promise（Cocos 3.x 需要加上 /spriteFrame 后缀）
+        const spriteFramePath = `${path}/spriteFrame`;
         const loadPromise = new Promise<SpriteFrame | null>((resolve) => {
-            resources.load(path, SpriteFrame, (err, spriteFrame) => {
-                if (err) {
-                    console.warn(`AssetManager: 加载精灵图失败 ${path}`, err.message);
-                    resolve(null);
+            resources.load(spriteFramePath, SpriteFrame, (err, spriteFrame) => {
+                if (err || !spriteFrame) {
+                    // 尝试不加后缀
+                    resources.load(path, SpriteFrame, (err2, spriteFrame2) => {
+                        if (err2 || !spriteFrame2) {
+                            console.warn(`AssetManager: 加载精灵图失败 ${path}`, err?.message || '未知错误');
+                            resolve(null);
+                            return;
+                        }
+                        if (useCache) {
+                            this._spriteFrameCache.set(path, spriteFrame2);
+                        }
+                        resolve(spriteFrame2);
+                    });
                     return;
                 }
 
-                if (spriteFrame && useCache) {
+                if (useCache) {
                     this._spriteFrameCache.set(path, spriteFrame);
                 }
 

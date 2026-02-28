@@ -91,9 +91,10 @@ export class MonsterManager extends Component {
      * 初始化对象池
      */
     private initPool(): void {
+        // 无论是否有预制体，都初始化对象池
+        // 如果没有预制体，createMonsterNode 会动态创建节点
         if (!this.monsterPrefab) {
-            console.warn('MonsterManager: 未设置怪物预制体');
-            return;
+            console.log('[MonsterManager] 未设置怪物预制体，将使用动态创建的节点');
         }
 
         for (let i = 0; i < this.initialPoolSize; i++) {
@@ -103,7 +104,7 @@ export class MonsterManager extends Component {
             this._monsterPool.push(monster);
         }
 
-        console.log(`MonsterManager: 对象池初始化完成, 大小: ${this._monsterPool.length}`);
+        console.log(`[MonsterManager] 对象池初始化完成, 大小: ${this._monsterPool.length}`);
     }
 
     /**

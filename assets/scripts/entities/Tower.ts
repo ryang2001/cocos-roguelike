@@ -3,7 +3,7 @@
  * 可放置的防御建筑，自动攻击范围内的敌人
  */
 
-import { _decorator, Component, Node, Vec3, Sprite } from 'cc';
+import { _decorator, Component, Node, Vec3, Sprite, UITransform } from 'cc';
 import { ElementType, TowerType, IWeapon, Rarity, ICombatEntity, ICharacter, DEFAULT_RESISTANCES } from '../types/Types';
 
 const { ccclass, property } = _decorator;
@@ -63,6 +63,14 @@ export class Tower extends Component implements ICombatEntity {
     // ==================== 生命周期 ====================
 
     onLoad() {
+        // 确保节点有UITransform组件（UI渲染必需）
+        let uiTransform = this.node.getComponent(UITransform);
+        if (!uiTransform) {
+            uiTransform = this.node.addComponent(UITransform);
+            uiTransform.setContentSize(64, 64); // 炮台大小
+            console.log('[Tower] 添加UITransform组件');
+        }
+
         this.initTowerData();
         this.updateTowerColor();
     }

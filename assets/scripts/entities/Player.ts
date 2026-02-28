@@ -3,9 +3,10 @@
  * 负责玩家的移动、攻击、装备管理
  */
 
-import { _decorator, Component, Node, Vec3, input, Input, EventTouch, Camera, Sprite, resources, SpriteFrame, Color, Vec2, ImageAsset, Texture2D } from 'cc';
+import { _decorator, Component, Node, Vec3, input, Input, EventTouch, Camera, Sprite, resources, SpriteFrame, Color, Vec2, ImageAsset, Texture2D, UITransform } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { GameManager } from '../core/GameManager';
+import { calculateDepth } from '../utils/IsometricUtils';
 import {
     IPlayer,
     IWeapon,
@@ -86,6 +87,14 @@ export class Player extends Component implements ICombatEntity {
     // ==================== 生命周期 ====================
 
     onLoad() {
+        // 确保节点有UITransform组件（UI渲染必需）
+        let uiTransform = this.node.getComponent(UITransform);
+        if (!uiTransform) {
+            uiTransform = this.node.addComponent(UITransform);
+            uiTransform.setContentSize(64, 64); // 默认玩家大小
+            console.log('[Player] 添加UITransform组件');
+        }
+
         // 初始化玩家数据
         this._playerData = createDefaultPlayer();
         this._playerData.maxHp = this.initialMaxHp;
@@ -131,20 +140,28 @@ export class Player extends Component implements ICombatEntity {
             return;
         }
 
-        // 动态加载精灵图
-        resources.load(texturePath, SpriteFrame, (err, spriteFrame) => {
-            if (err) {
-                console.warn(`Player: 加载精灵图失败 ${texturePath}，使用默认图形`);
-                this.createDefaultPlayerSprite(sprite);
+        // 动态加载精灵图（Cocos 3.x 需要加上 /spriteFrame 后缀）
+        const spriteFramePath = `${texturePath}/spriteFrame`;
+        resources.load(spriteFramePath, SpriteFrame, (err, spriteFrame) => {
+            if (err || !spriteFrame) {
+                console.warn(`Player: 加载精灵图失败 ${spriteFramePath}，尝试不加后缀...`);
+                // 尝试不加后缀加载
+                resources.load(texturePath, SpriteFrame, (err2, spriteFrame2) => {
+                    if (err2 || !spriteFrame2) {
+                        console.warn(`Player: 二次加载也失败，使用默认图形`);
+                        this.createDefaultPlayerSprite(sprite);
+                        return;
+                    }
+                    sprite.spriteFrame = spriteFrame2;
+                    sprite.sizeMode = Sprite.SizeMode.RAW;
+                    console.log(`Player: 成功加载精灵图（无后缀） ${texturePath}`);
+                });
                 return;
             }
 
-            if (spriteFrame) {
-                sprite.spriteFrame = spriteFrame;
-                console.log(`Player: 成功加载精灵图 ${texturePath}`);
-            } else {
-                this.createDefaultPlayerSprite(sprite);
-            }
+            sprite.spriteFrame = spriteFrame;
+            sprite.sizeMode = Sprite.SizeMode.RAW; // 使用原始尺寸
+            console.log(`Player: 成功加载精灵图 ${spriteFramePath}`);
         });
     }
 
@@ -251,21 +268,26 @@ export class Player extends Component implements ICombatEntity {
      */
     private getPlayerTexturePath(): string | null {
         const pathMap: { [key: string]: string } = {
-            'knight': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_KNIGHT + '/spriteFrame',
-            'mage': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_MAGE + '/spriteFrame',
-            'paladin': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_PALADIN + '/spriteFrame',
-            'ranger': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_RANGER + '/spriteFrame',
-            'rogue': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_ROGUE + '/spriteFrame',
+            'knight': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_KNIGHT,
+            'mage': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_MAGE,
+            'paladin': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_PALADIN,
+            'ranger': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_RANGER,
+            'rogue': GameConfig.TEXTURE_PATHS.CHARACTERS.PLAYER_ROGUE,
         };
         return pathMap[this.playerClass] || pathMap['knight'];
     }
 
     start() {
-        // 设置初始位置
-        this.node.setPosition(new Vec3(GameConfig.WORLD_WIDTH / 2, GameConfig.WORLD_HEIGHT / 2, 0));
+        // 设置初始位置（世界中心 - 2.5D等距视角中心为原点）
+        const startPos = new Vec3(0, 0, 0);
+        this.node.setPosition(startPos);
+        console.log(`[Player] 初始位置: (${startPos.x}, ${startPos.y}, ${startPos.z})`);
     }
 
     update(deltaTime: number) {
+        // 更新深度排序（2.5D等距视角）
+        this.updateDepthSorting();
+
         // 更新移动
         this.updateMovement(deltaTime);
 
@@ -297,6 +319,23 @@ export class Player extends Component implements ICombatEntity {
             speed: this._playerData.speed,
             position: this.node.position
         };
+    }
+
+    /**
+     * 更新深度排序（2.5D等距视角）
+     * 根据Y坐标调整z轴，实现正确的遮挡关系
+     */
+    private updateDepthSorting(): void {
+        const depth = calculateDepth(this.node.position.y, this.node.position.x);
+
+        // 只有当深度变化时才更新位置
+        if (Math.abs(this.node.position.z - depth) > 0.001) {
+            this.node.setPosition(
+                this.node.position.x,
+                this.node.position.y,
+                depth
+            );
+        }
     }
 
     /**
@@ -425,6 +464,8 @@ export class Player extends Component implements ICombatEntity {
      * 更新移动
      */
     private updateMovement(deltaTime: number): void {
+        if (!this._playerData) return;
+
         // 如果有摇杆输入，优先使用摇杆控制
         if (this._useJoystick && this._joystickPower > 0) {
             this.updateJoystickMovement(deltaTime);
@@ -464,6 +505,7 @@ export class Player extends Component implements ICombatEntity {
      */
     private updateJoystickMovement(deltaTime: number): void {
         if (this._joystickPower <= 0) return;
+        if (!this._playerData) return;
 
         const currentPos = this.node.getPosition();
 
@@ -505,6 +547,8 @@ export class Player extends Component implements ICombatEntity {
      * 更新攻击
      */
     private updateAttack(deltaTime: number): void {
+        if (!this._playerData) return;
+
         const combatSystem = this._getCombatSystem();
         if (!combatSystem) return;
 

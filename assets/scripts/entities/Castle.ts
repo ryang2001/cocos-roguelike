@@ -3,7 +3,7 @@
  * 玩家的基地，需要保护
  */
 
-import { _decorator, Component, Node, Sprite, Color, Vec3 } from 'cc';
+import { _decorator, Component, Node, Sprite, Color, Vec3, UITransform } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { ICastleState, TimePhase } from '../types/Types';
 import { GameManager } from '../core/GameManager';
@@ -60,6 +60,14 @@ export class Castle extends Component {
         } else {
             this.node.destroy();
             return;
+        }
+
+        // 确保节点有UITransform组件（UI渲染必需）
+        let uiTransform = this.node.getComponent(UITransform);
+        if (!uiTransform) {
+            uiTransform = this.node.addComponent(UITransform);
+            uiTransform.setContentSize(128, 128); // 城堡大小
+            console.log('[Castle] 添加UITransform组件');
         }
 
         this._currentHp = this.maxHp;
