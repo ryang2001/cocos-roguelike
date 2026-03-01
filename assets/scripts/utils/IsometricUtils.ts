@@ -1,101 +1,151 @@
 /**
- * 等距坐标转换工具
- * 用于2.5D斜45度视角的坐标转换
- * 类似饥荒游戏的视角效果
+ * 等距视角配置 - Camera旋转方案
+ * 
+ * 核心思路：
+ * - 瓦片放在XY平面上（正常2D布局）
+ * - Camera在上方倾斜俯视地图
+ * - Camera绕Z轴旋转45度产生等距效果
+ * 
+ * 优势：
+ * 1. 坐标系统简单（直接使用笛卡尔坐标）
+ * 2. 碰撞检测简单（2D碰撞）
+ * 3. 深度排序简单（按Y坐标排序）
+ * 4. 更符合3D引擎的设计理念
  */
 
-import { Vec3 } from 'cc';
+import { Vec3, Quat, math } from 'cc';
 
 /**
- * 等距投影配置
+ * 等距视角配置
  */
 export const ISOMETRIC_CONFIG = {
-    TILE_WIDTH: 64,      // 瓦片原始宽度
-    TILE_HEIGHT: 64,     // 瓦片原始高度
-    ISO_SCALE_X: 1.0,    // X轴缩放
-    ISO_SCALE_Y: 0.5,    // Y轴缩放（sin(30°) ≈ 0.5，用于模拟深度）
-    DEPTH_SCALE: 0.001   // 深度排序的次级权重
+    // Camera旋转角度（欧拉角，度数）
+    CAMERA_ROTATION_X: -45,     // 绕X轴旋转-45度（俯视角度，负值表示向下看）
+    CAMERA_ROTATION_Y: 0,       // 绕Y轴旋转0度
+    CAMERA_ROTATION_Z: 45,      // 绕Z轴旋转45度（产生等距效果）
+    
+    // Camera高度（距离地面的垂直距离）
+    CAMERA_HEIGHT: 800,
+    
+    // 瓦片尺寸（平面正方形）
+    TILE_SIZE: 64,              // 瓦片边长
+    
+    // 深度排序系数
+    DEPTH_SCALE: 0.001,
 };
 
 /**
- * 笛卡尔坐标 → 等距坐标
- * 将2D俯视坐标转换为斜45度视角坐标
- * @param cartX 笛卡尔X坐标
- * @param cartY 笛卡尔Y坐标
- * @returns 等距坐标 Vec3
+ * 获取Camera的旋转四元数
+ * Camera绕Z轴旋转45度，然后绕X轴旋转俯视
  */
-export function cartesianToIsometric(cartX: number, cartY: number): Vec3 {
-    // 等距投影公式
-    // isoX = (x - y) * cos(45°)
-    // isoY = (x + y) * sin(45°) * 0.5（垂直压缩以模拟视角）
-    const isoX = (cartX - cartY) * 0.5 * ISOMETRIC_CONFIG.ISO_SCALE_X;
-    const isoY = (cartX + cartY) * 0.25 * ISOMETRIC_CONFIG.ISO_SCALE_Y;
-
-    return new Vec3(isoX, isoY, 0);
+export function getCameraRotation(): Quat {
+    const rotation = new Quat();
+    
+    // 使用欧拉角创建旋转
+    // 顺序：先绕Z轴旋转（等距），再绕X轴旋转（俯视）
+    Quat.fromEuler(rotation, 
+        ISOMETRIC_CONFIG.CAMERA_ROTATION_X,
+        ISOMETRIC_CONFIG.CAMERA_ROTATION_Y,
+        ISOMETRIC_CONFIG.CAMERA_ROTATION_Z
+    );
+    
+    return rotation;
 }
 
 /**
- * 等距坐标 → 笛卡尔坐标
- * 用于将屏幕点击位置转换回游戏逻辑坐标
- * @param isoX 等距X坐标
- * @param isoY 等距Y坐标
- * @returns 笛卡尔坐标 Vec3
+ * 获取Camera的位置
+ * Camera在目标点的正上方
+ * 
+ * @param targetX 目标点X坐标（默认0）
+ * @param targetY 目标点Y坐标（默认0）
  */
-export function isometricToCartesian(isoX: number, isoY: number): Vec3 {
-    // 反向转换公式
-    // cartX = isoX + isoY * 2
-    // cartY = isoY * 2 - isoX
-    const cartX = (isoX / (0.5 * ISOMETRIC_CONFIG.ISO_SCALE_X) + isoY / (0.25 * ISOMETRIC_CONFIG.ISO_SCALE_Y)) / 2;
-    const cartY = (isoY / (0.25 * ISOMETRIC_CONFIG.ISO_SCALE_Y) - isoX / (0.5 * ISOMETRIC_CONFIG.ISO_SCALE_X)) / 2;
-
-    return new Vec3(cartX, cartY, 0);
+export function getCameraPosition(targetX: number = 0, targetY: number = 0): Vec3 {
+    // Camera在目标点的正上方
+    // 由于Camera有旋转，它会自动看向正确的方向
+    return new Vec3(targetX, targetY, ISOMETRIC_CONFIG.CAMERA_HEIGHT);
 }
 
 /**
- * 计算深度值
- * 用于确定渲染顺序（Y坐标越大，越靠前渲染）
- * @param cartY 笛卡尔Y坐标
- * @param cartX 笛卡尔X坐标（次级排序）
- * @returns 深度值（越小越靠后渲染）
+ * 计算深度值（用于渲染排序）
+ * 在Camera旋转方案中，深度排序更简单
+ * 
+ * @param y 笛卡尔Y坐标
+ * @param x 笛卡尔X坐标（次级排序）
+ * @returns 深度值
  */
-export function calculateDepth(cartY: number, cartX: number = 0): number {
-    // 主要按Y排序，X作为次级排序
-    // 返回负值是因为在Cocos中z坐标越大越靠前
-    return -(cartY + cartX * ISOMETRIC_CONFIG.DEPTH_SCALE);
+export function calculateDepth(y: number, x: number = 0): number {
+    // 简单的Y坐标排序，X作为次级排序
+    return y + x * ISOMETRIC_CONFIG.DEPTH_SCALE;
 }
 
 /**
- * 计算瓦片的等距位置
+ * 笛卡尔坐标 → 屏幕坐标
+ * 在Camera旋转方案中，这个函数主要用于UI显示
+ * 
+ * @param x 笛卡尔X坐标
+ * @param y 笛卡尔Y坐标
+ * @returns 屏幕坐标（近似）
+ */
+export function cartesianToScreen(x: number, y: number): Vec3 {
+    // 简化的等距转换（用于UI计算）
+    const rotZ = ISOMETRIC_CONFIG.CAMERA_ROTATION_Z * Math.PI / 180;
+    const cosZ = Math.cos(rotZ);
+    const sinZ = Math.sin(rotZ);
+    
+    // 旋转后的屏幕坐标
+    const screenX = (x - y) * cosZ;
+    const screenY = (x + y) * sinZ * 0.5;  // 0.5 是俯视角度的压缩
+    
+    return new Vec3(screenX, screenY, 0);
+}
+
+/**
+ * 屏幕坐标 → 笛卡尔坐标
+ * 用于将点击位置转换回世界坐标
+ * 
+ * @param screenX 屏幕X坐标
+ * @param screenY 屏幕Y坐标
+ * @returns 笛卡尔坐标
+ */
+export function screenToCartesian(screenX: number, screenY: number): Vec3 {
+    const rotZ = ISOMETRIC_CONFIG.CAMERA_ROTATION_Z * Math.PI / 180;
+    const cosZ = Math.cos(rotZ);
+    const sinZ = Math.sin(rotZ);
+    
+    // 反向转换
+    const x = (screenX / cosZ + screenY / (sinZ * 0.5)) / 2;
+    const y = (screenY / (sinZ * 0.5) - screenX / cosZ) / 2;
+    
+    return new Vec3(x, y, 0);
+}
+
+/**
+ * 获取瓦片的世界位置
+ * 在Camera旋转方案中，瓦片直接使用笛卡尔坐标
+ * 
  * @param tileX 瓦片X索引
  * @param tileY 瓦片Y索引
- * @param tileSize 瓦片大小
  * @param mapWidth 地图宽度（瓦片数）
  * @param mapHeight 地图高度（瓦片数）
- * @returns 等距坐标
+ * @returns 世界坐标
  */
-export function getTileIsometricPosition(
+export function getTileWorldPosition(
     tileX: number,
     tileY: number,
-    tileSize: number,
     mapWidth: number,
     mapHeight: number
 ): Vec3 {
-    // 计算笛卡尔世界坐标（以地图中心为原点）
-    const worldWidth = mapWidth * tileSize;
-    const worldHeight = mapHeight * tileSize;
-    const cartX = tileX * tileSize - worldWidth / 2 + tileSize / 2;
-    const cartY = tileY * tileSize - worldHeight / 2 + tileSize / 2;
-
-    // 转换为等距坐标
-    return cartesianToIsometric(cartX, cartY);
+    const tileSize = ISOMETRIC_CONFIG.TILE_SIZE;
+    
+    // 以地图中心为原点
+    const worldX = (tileX - mapWidth / 2 + 0.5) * tileSize;
+    const worldY = (tileY - mapHeight / 2 + 0.5) * tileSize;
+    
+    return new Vec3(worldX, worldY, 0);
 }
 
 /**
  * 深度排序比较函数
- * 用于Array.sort()对游戏实体进行排序
- * @param a 实体A的位置
- * @param b 实体B的位置
- * @returns 排序值
  */
 export function depthSortCompare(a: Vec3, b: Vec3): number {
     const depthA = calculateDepth(a.y, a.x);
@@ -103,38 +153,6 @@ export function depthSortCompare(a: Vec3, b: Vec3): number {
     return depthA - depthB;
 }
 
-/**
- * 获取瓦片的渲染顺序索引
- * 用于设置节点的siblingIndex
- * @param tileX 瓦片X索引
- * @param tileY 瓦片Y索引
- * @param mapWidth 地图宽度
- * @param mapHeight 地图高度
- * @returns 渲染顺序索引
- */
-export function getTileRenderOrder(
-    tileX: number,
-    tileY: number,
-    mapWidth: number,
-    mapHeight: number
-): number {
-    // 从左上到右下渲染（确保深度正确）
-    // 使用 (y * width + x) 计算顺序
-    return tileY * mapWidth + tileX;
-}
-
-/**
- * 调整瓦片锚点以适应等距视角
- * 在等距视角下，瓦片需要调整锚点来正确对齐
- * @param tileSize 瓦片大小
- * @returns 锚点偏移量
- */
-export function getTileAnchorOffset(tileSize: number): { x: number, y: number } {
-    // 菱形瓦片的锚点应该在中心
-    return {
-        x: 0.5,
-        y: 0.5
-    };
-}
-
-console.log('[IsometricUtils] 等距坐标工具已加载');
+console.log('[IsometricUtils] Camera旋转方案已加载');
+console.log(`  - Camera旋转: X=${ISOMETRIC_CONFIG.CAMERA_ROTATION_X}°, Z=${ISOMETRIC_CONFIG.CAMERA_ROTATION_Z}°`);
+console.log(`  - Camera高度: ${ISOMETRIC_CONFIG.CAMERA_HEIGHT}`);

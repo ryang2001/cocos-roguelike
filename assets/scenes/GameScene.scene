@@ -30,6 +30,9 @@
       },
       {
         "__id__": 19
+      },
+      {
+        "__id__": 34
       }
     ],
     "_active": true,
@@ -493,6 +496,9 @@
     "_components": [
       {
         "__id__": 15
+      },
+      {
+        "__id__": 36
       }
     ],
     "_prefab": null,
@@ -1028,5 +1034,168 @@
   {
     "__type__": "cc.PostSettingsInfo",
     "_toneMappingType": 0
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "GameManager",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 1
+    },
+    "_children": [
+      {
+        "__id__": 37
+      }
+    ],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 35
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 1073741824,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": "game-manager-node-001"
+  },
+  {
+    "__type__": "GameSceneInitializer",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 34
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "mapGenerator": {
+      "__id__": 38
+    },
+    "cameraController": {
+      "__id__": 36
+    },
+    "_id": "game-scene-initializer-001"
+  },
+  {
+    "__type__": "CameraController",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 14
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "target": null,
+    "smoothSpeed": 5,
+    "offset": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 1000
+    },
+    "enableBounds": true,
+    "minPosition": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "maxPosition": {
+      "__type__": "cc.Vec3",
+      "x": 3000,
+      "y": 3000,
+      "z": 1000
+    },
+    "zoomFactor": 1,
+    "autoFitMapBounds": true,
+    "_id": "camera-controller-001"
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "MapGenerator",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 34
+    },
+    "_children": [],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 38
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 1073741824,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": "map-generator-node-001"
+  },
+  {
+    "__type__": "MapGenerator",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 37
+    },
+    "_enabled": true,
+    "__prefab": null,
+    "tileSize": 64,
+    "mapWidth": 46,
+    "mapHeight": 46,
+    "groundTileSprite": null,
+    "_id": "map-generator-comp-001"
   }
 ]

@@ -6,11 +6,21 @@
 import { _decorator, Component, Node, Prefab, instantiate, resources, Vec3, Camera, Canvas, Layers, director, Sprite, SpriteFrame } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { AssetManager } from '../systems/AssetManager';
+import { MapGenerator } from '../world/MapGenerator';
+import { CameraController } from '../systems/CameraController';
 
 const { ccclass, property } = _decorator;
 
 @ccclass('GameSceneInitializer')
 export class GameSceneInitializer extends Component {
+
+    // ==================== 编辑器属性 ====================
+
+    @property({ type: MapGenerator, displayName: '地图生成器' })
+    mapGenerator: MapGenerator | null = null;
+
+    @property({ type: CameraController, displayName: '摄像机控制器' })
+    cameraController: CameraController | null = null;
 
     // Prefab路径（代码中动态加载）
     private readonly PREFAB_PATHS = {
@@ -33,6 +43,9 @@ export class GameSceneInitializer extends Component {
         // 创建世界根节点
         this.createWorldNode();
 
+        // 生成地图
+        await this.generateMap();
+
         // 预加载资源
         await this.preloadAssets();
 
@@ -41,6 +54,9 @@ export class GameSceneInitializer extends Component {
 
         // 创建游戏对象
         this.createGameObjects();
+
+        // 设置摄像机
+        this.setupCameraWithMap();
 
         console.log('GameSceneInitializer: 场景初始化完成');
     }
@@ -52,6 +68,30 @@ export class GameSceneInitializer extends Component {
         this._worldNode = new Node('World');
         this._worldNode.layer = Layers.Enum.UI_2D;
         this.node.addChild(this._worldNode);
+    }
+
+    /**
+     * 生成地图
+     */
+    private async generateMap(): Promise<void> {
+        console.log('GameSceneInitializer: 开始生成地图...');
+
+        // 如果编辑器中未指定MapGenerator，动态创建一个
+        if (!this.mapGenerator) {
+            const mapGenNode = new Node('MapGenerator');
+            this.node.addChild(mapGenNode);
+            this.mapGenerator = mapGenNode.addComponent(MapGenerator);
+
+            // 配置地图参数
+            this.mapGenerator.tileSize = 64;
+            this.mapGenerator.mapWidth = Math.floor(GameConfig.WORLD_WIDTH / 64);
+            this.mapGenerator.mapHeight = Math.floor(GameConfig.WORLD_HEIGHT / 64);
+        }
+
+        // 生成地图
+        await this.mapGenerator.generateMap();
+
+        console.log('GameSceneInitializer: 地图生成完成');
     }
 
     /**
@@ -173,6 +213,65 @@ export class GameSceneInitializer extends Component {
         }
 
         console.log('GameSceneInitializer: 摄像机已设置');
+    }
+
+    /**
+     * 设置摄像机（与地图联动）
+     */
+    private setupCameraWithMap(): void {
+        const canvas = this.node.getComponentInChildren(Canvas);
+        if (!canvas) {
+            console.warn('GameSceneInitializer: 未找到Canvas');
+            return;
+        }
+
+        // 如果编辑器中未指定CameraController，动态创建一个
+        if (!this.cameraController) {
+            // 查找现有摄像机
+            let camera = this.node.getComponentInChildren(Camera);
+            let cameraNode: Node;
+
+            if (!camera) {
+                // 创建新的摄像机节点
+                cameraNode = new Node('MainCamera');
+                camera = cameraNode.addComponent(Camera);
+                camera.projection = Camera.ProjectionType.ORTHO;
+                camera.orthoHeight = 360;
+                camera.visibility = Layers.Enum.UI_2D;
+                canvas.node.addChild(cameraNode);
+            } else {
+                cameraNode = camera.node;
+            }
+
+            // 添加CameraController组件
+            this.cameraController = cameraNode.getComponent(CameraController);
+            if (!this.cameraController) {
+                this.cameraController = cameraNode.addComponent(CameraController);
+            }
+        }
+
+        // 配置摄像机控制器
+        if (this.cameraController) {
+            // 设置跟随目标为玩家
+            if (this._playerNode) {
+                this.cameraController.setTarget(this._playerNode);
+            }
+
+            // 使用地图尺寸自动适配边界
+            if (this.mapGenerator) {
+                const mapWidth = this.mapGenerator.mapWidth * this.mapGenerator.tileSize;
+                const mapHeight = this.mapGenerator.mapHeight * this.mapGenerator.tileSize;
+                this.cameraController.fitBoundsToMap(mapWidth, mapHeight);
+            } else {
+                // 如果没有地图生成器，使用配置的世界尺寸
+                this.cameraController.fitBoundsToMap(GameConfig.WORLD_WIDTH, GameConfig.WORLD_HEIGHT);
+            }
+
+            // 启用边界限制
+            this.cameraController.setEnableBounds(true);
+
+            console.log('GameSceneInitializer: 摄像机已配置，跟随玩家并限制在地图范围内');
+        }
     }
 
     /**

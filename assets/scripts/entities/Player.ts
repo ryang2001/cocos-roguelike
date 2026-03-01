@@ -7,6 +7,7 @@ import { _decorator, Component, Node, Vec3, input, Input, EventTouch, Camera, Sp
 import { GameConfig } from '../config/GameConfig';
 import { GameManager } from '../core/GameManager';
 import { calculateDepth } from '../utils/IsometricUtils';
+import { ENTITY_SIZE_CONFIG, getEntityYOffset, calculateEntityDepth } from '../config/EntitySizeConfig';
 import {
     IPlayer,
     IWeapon,
@@ -91,7 +92,9 @@ export class Player extends Component implements ICombatEntity {
         let uiTransform = this.node.getComponent(UITransform);
         if (!uiTransform) {
             uiTransform = this.node.addComponent(UITransform);
-            uiTransform.setContentSize(64, 64); // 默认玩家大小
+            // 使用配置的玩家尺寸
+            uiTransform.setContentSize(ENTITY_SIZE_CONFIG.PLAYER.WIDTH, ENTITY_SIZE_CONFIG.PLAYER.HEIGHT);
+            uiTransform.anchorPoint.set(0.5, ENTITY_SIZE_CONFIG.PLAYER.ANCHOR_Y);
             console.log('[Player] 添加UITransform组件');
         }
 
@@ -326,7 +329,12 @@ export class Player extends Component implements ICombatEntity {
      * 根据Y坐标调整z轴，实现正确的遮挡关系
      */
     private updateDepthSorting(): void {
-        const depth = calculateDepth(this.node.position.y, this.node.position.x);
+        // 使用实体高度计算深度
+        const depth = calculateEntityDepth(
+            this.node.position.y, 
+            this.node.position.x, 
+            ENTITY_SIZE_CONFIG.PLAYER.HEIGHT
+        );
 
         // 只有当深度变化时才更新位置
         if (Math.abs(this.node.position.z - depth) > 0.001) {

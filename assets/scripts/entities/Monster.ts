@@ -6,6 +6,7 @@
 import { _decorator, Component, Node, Vec3, Sprite, Color, resources, SpriteFrame, UITransform } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { calculateDepth } from '../utils/IsometricUtils';
+import { ENTITY_SIZE_CONFIG, calculateEntityDepth } from '../config/EntitySizeConfig';
 import {
     IMonster,
     IMonsterConfig,
@@ -108,7 +109,10 @@ export class Monster extends Component implements ICombatEntity {
         let uiTransform = this.node.getComponent(UITransform);
         if (!uiTransform) {
             uiTransform = this.node.addComponent(UITransform);
-            uiTransform.setContentSize(64, 64); // 默认怪物大小
+            // 根据怪物类型设置尺寸
+            const sizeConfig = this.getMonsterSizeConfig();
+            uiTransform.setContentSize(sizeConfig.width, sizeConfig.height);
+            uiTransform.anchorPoint.set(0.5, sizeConfig.anchorY);
             console.log(`[Monster] ${this.monsterType} 添加UITransform组件`);
         }
 
@@ -120,6 +124,31 @@ export class Monster extends Component implements ICombatEntity {
 
         // 初始化Boss技能
         this.initBossSkills();
+    }
+
+    /**
+     * 获取怪物尺寸配置
+     */
+    private getMonsterSizeConfig(): { width: number; height: number; anchorY: number } {
+        if (this._isBoss) {
+            return {
+                width: ENTITY_SIZE_CONFIG.MONSTER.BOSS.WIDTH,
+                height: ENTITY_SIZE_CONFIG.MONSTER.BOSS.HEIGHT,
+                anchorY: ENTITY_SIZE_CONFIG.MONSTER.BOSS.ANCHOR_Y
+            };
+        } else if (this.isElite) {
+            return {
+                width: ENTITY_SIZE_CONFIG.MONSTER.ELITE.WIDTH,
+                height: ENTITY_SIZE_CONFIG.MONSTER.ELITE.HEIGHT,
+                anchorY: ENTITY_SIZE_CONFIG.MONSTER.ELITE.ANCHOR_Y
+            };
+        } else {
+            return {
+                width: ENTITY_SIZE_CONFIG.MONSTER.NORMAL.WIDTH,
+                height: ENTITY_SIZE_CONFIG.MONSTER.NORMAL.HEIGHT,
+                anchorY: ENTITY_SIZE_CONFIG.MONSTER.NORMAL.ANCHOR_Y
+            };
+        }
     }
 
     /**

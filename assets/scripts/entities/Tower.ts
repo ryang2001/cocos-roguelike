@@ -3,8 +3,10 @@
  * 可放置的防御建筑，自动攻击范围内的敌人
  */
 
-import { _decorator, Component, Node, Vec3, Sprite, UITransform } from 'cc';
+import { _decorator, Component, Node, Vec3, Sprite, UITransform, Color, resources, SpriteFrame, ImageAsset, Texture2D } from 'cc';
 import { ElementType, TowerType, IWeapon, Rarity, ICombatEntity, ICharacter, DEFAULT_RESISTANCES } from '../types/Types';
+import { GameConfig } from '../config/GameConfig';
+import { ENTITY_SIZE_CONFIG, calculateEntityDepth } from '../config/EntitySizeConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -67,12 +69,101 @@ export class Tower extends Component implements ICombatEntity {
         let uiTransform = this.node.getComponent(UITransform);
         if (!uiTransform) {
             uiTransform = this.node.addComponent(UITransform);
-            uiTransform.setContentSize(64, 64); // 炮台大小
+            // 使用配置的炮台尺寸
+            uiTransform.setContentSize(ENTITY_SIZE_CONFIG.TOWER.WIDTH, ENTITY_SIZE_CONFIG.TOWER.HEIGHT);
+            uiTransform.anchorPoint.set(0.5, ENTITY_SIZE_CONFIG.TOWER.ANCHOR_Y);
             console.log('[Tower] 添加UITransform组件');
         }
 
         this.initTowerData();
         this.updateTowerColor();
+        this.loadTowerSprite();
+    }
+
+    /**
+     * 加载炮台精灵图
+     */
+    private loadTowerSprite(): void {
+        const sprite = this.node.getComponent(Sprite);
+        if (!sprite) {
+            console.warn('Tower: 节点上没有Sprite组件');
+            return;
+        }
+
+        // 尝试加载炮台贴图
+        const texturePath = GameConfig.TEXTURE_PATHS.TOWERS.BASIC;
+        const spriteFramePath = `${texturePath}/spriteFrame`;
+
+        resources.load(spriteFramePath, SpriteFrame, (err, spriteFrame) => {
+            if (err || !spriteFrame) {
+                console.warn(`Tower: 加载精灵图失败 ${spriteFramePath}，使用默认图形`);
+                this.createDefaultTowerSprite(sprite);
+                return;
+            }
+            sprite.spriteFrame = spriteFrame;
+            sprite.sizeMode = Sprite.SizeMode.RAW;
+            console.log(`Tower: 成功加载精灵图 ${spriteFramePath}`);
+        });
+    }
+
+    /**
+     * 创建默认炮台图形（当纹理加载失败时使用）
+     */
+    private createDefaultTowerSprite(sprite: Sprite): void {
+        try {
+            const canvas = document.createElement('canvas');
+            const size = 64;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                sprite.color = new Color(128, 128, 128, 255);
+                return;
+            }
+
+            // 清空画布
+            ctx.clearRect(0, 0, size, size);
+
+            // 根据炮台类型选择颜色
+            const colors: { [key in TowerType]: string } = {
+                [TowerType.BASIC]: '#808080',  // 灰色
+                [TowerType.FIRE]: '#ff4500',   // 红色
+                [TowerType.ICE]: '#00bfff',    // 蓝色
+                [TowerType.THUNDER]: '#ffd700', // 金色
+                [TowerType.ARROW]: '#228b22',   // 绿色
+                [TowerType.CANNON]: '#8b4513',  // 棕色
+                [TowerType.MAGIC]: '#9932cc',   // 紫色
+                [TowerType.POISON]: '#32cd32'   // 绿色
+            };
+            const color = colors[this.towerType] || colors[TowerType.BASIC];
+
+            // 绘制炮台底座（圆形）
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 绘制炮管（矩形）
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(size / 2 - 4, size / 4, 8, size / 2);
+
+            // 创建纹理
+            const imageAsset = new ImageAsset(canvas);
+            const texture = new Texture2D();
+            texture.image = imageAsset;
+
+            const spriteFrame = new SpriteFrame();
+            spriteFrame.texture = texture;
+
+            sprite.spriteFrame = spriteFrame;
+            console.log(`Tower: 创建默认炮台图形成功`);
+        } catch (error) {
+            console.error('Tower: 创建默认图形失败:', error);
+            sprite.color = new Color(128, 128, 128, 255);
+        }
     }
 
     start() {

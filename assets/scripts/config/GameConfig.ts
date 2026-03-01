@@ -304,8 +304,19 @@ export class GameConfig {
             LIGHTNING: 'textures/towers/tower_lightning',
         },
 
-        // 地形
+        // 地形 - 对应ROGUELIKE_DESIGN.md中的特殊地形
         TERRAIN: {
+            // 基础地形
+            PLAIN: 'textures/terrain/tiles/tile_plain',       // 平原
+            // 特殊地形
+            FOREST: 'textures/terrain/tiles/tile_forest',     // 森林 - 隐蔽区域
+            MOUNTAIN: 'textures/terrain/tiles/tile_mountain', // 雪山 - 减速效果
+            VOLCANO: 'textures/terrain/tiles/tile_volcano',   // 火山 - 持续伤害
+            DESERT: 'textures/terrain/tiles/tile_desert',     // 沙漠 - 视野受限
+            SWAMP: 'textures/terrain/tiles/tile_swamp',       // 沼泽 - 毒性区域
+            CASTLE: 'textures/terrain/tiles/tile_castle',     // 城堡 - 玩家基地
+            WATER: 'textures/terrain/tiles/tile_water',       // 水域 - 障碍
+            // 兼容旧版本
             GRASS_01: 'textures/terrain/tiles/tile_grass_01',
             DIRT_01: 'textures/terrain/tiles/tile_dirt_01',
             STONE_01: 'textures/terrain/tiles/tile_stone_01',

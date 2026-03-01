@@ -1,16 +1,22 @@
 /**
  * 游戏管理器 - Cocos Creator版本
  * 负责游戏的整体流程控制
+ * 
+ * 使用Camera旋转方案实现2.5D等距视角
  */
 
-import { _decorator, Component, Node, director, Prefab, instantiate, resources, Vec3, Camera, Canvas, Layers, Sprite, SpriteFrame, UITransform, Label, Color } from 'cc';
+import { _decorator, Component, Node, director, Prefab, instantiate, resources, Vec3, Camera, Canvas, Layers, Sprite, SpriteFrame, UITransform, Label, Color, Quat } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { WaveSystem } from '../systems/WaveSystem';
 import { AssetManager } from '../systems/AssetManager';
 import { MonsterManager } from '../systems/MonsterManager';
+import { CameraController } from '../systems/CameraController';
+import { ISOMETRIC_CONFIG, getCameraRotation, getCameraPosition } from '../utils/IsometricUtils';
 import { MapGenerator } from '../world/MapGenerator';
 import { Joystick } from '../ui/Joystick';
 import { cartesianToIsometric } from '../utils/IsometricUtils';
+// 框架模块
+import { poolManager, clientEvent, uiManager, configManager } from '../framework';
 // 显式导入实体类以确保模块加载（预制体依赖）
 import { Player } from '../entities/Player';
 import { Monster } from '../entities/Monster';
@@ -77,7 +83,13 @@ export class GameManager extends Component {
     onLoad() {
         if (GameManager._instance === null) {
             GameManager._instance = this;
-            director.addPersistRootNode(this.node);
+            // 只有当节点是场景根节点的直接子节点时才能设为常驻节点
+            const scene = director.getScene();
+            if (scene && this.node.parent === scene) {
+                director.addPersistRootNode(this.node);
+            } else {
+                console.log('GameManager: 节点不是场景根节点的子节点，跳过设置常驻节点');
+            }
         } else {
             this.node.destroy();
             return;
@@ -114,11 +126,10 @@ export class GameManager extends Component {
 
         const playerPos = this._playerNode ? `(${Math.floor(this._playerNode.position.x)},${Math.floor(this._playerNode.position.y)},${Math.floor(this._playerNode.position.z)})` : 'N/A';
 
-        // UICanvas Camera位置
+        // GameCamera位置
         let cameraPos = 'N/A';
-        const uiCamera = this._uiCanvas?.getComponent(Camera);
-        if (uiCamera) {
-            const pos = uiCamera.node.position;
+        if (this._cameraNode) {
+            const pos = this._cameraNode.position;
             cameraPos = `(${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)})`;
         }
 
@@ -155,43 +166,27 @@ export class GameManager extends Component {
 
     /**
      * 更新摄像机跟随玩家
-     * 使用UICanvas的Camera - 适配2.5D等距视角
-     *
-     * 注意：在2.5D等距视角中，游戏逻辑使用笛卡尔坐标，相机跟随也使用笛卡尔坐标
-     * 等距效果由MapGenerator在渲染瓦片时处理
+     * 使用 CameraController 组件（如果存在）
      */
     private updateCameraFollow(): void {
-        if (!this._playerNode) return;
-
-        // 获取UICanvas的Camera
-        const uiCamera = this._uiCanvas?.getComponent(Camera);
-        if (!uiCamera) return;
-
-        // 获取玩家位置（笛卡尔坐标）
-        const playerPos = this._playerNode.position;
-
-        // 设置Camera位置跟随玩家（直接使用笛卡尔坐标）
-        const cameraNode = uiCamera.node;
-
-        // 保持z轴位置不变（摄像机高度）
-        const cameraZ = cameraNode.position.z;
-
-        // 摄像机平滑跟随玩家
-        const currentPos = cameraNode.position;
-        const targetX = playerPos.x;
-        const targetY = playerPos.y;
-
-        // 简单的平滑插值
-        const smoothFactor = 0.1;
-        const newX = currentPos.x + (targetX - currentPos.x) * smoothFactor;
-        const newY = currentPos.y + (targetY - currentPos.y) * smoothFactor;
-
-        cameraNode.setPosition(newX, newY, cameraZ);
-
-        // 调试信息（每60帧打印一次）
-        if (this._frameCount % 60 === 0) {
-            console.log(`[Camera] Pos: (${newX.toFixed(0)}, ${newY.toFixed(0)}), Player: (${playerPos.x.toFixed(0)}, ${playerPos.y.toFixed(0)})`);
+        // 优先使用 CameraController
+        const cameraController = CameraController.instance;
+        if (cameraController) {
+            // CameraController 会在 lateUpdate 中自动跟随
+            return;
         }
+        
+        // 备用方案：直接更新 Camera 节点位置
+        if (!this._playerNode || !this._cameraNode) return;
+
+        const playerPos = this._playerNode.position;
+        const currentPos = this._cameraNode.position;
+        const smoothFactor = 0.1;
+
+        const newX = currentPos.x + (playerPos.x - currentPos.x) * smoothFactor;
+        const newY = currentPos.y + (playerPos.y - currentPos.y) * smoothFactor;
+
+        this._cameraNode.setPosition(newX, newY, currentPos.z);
     }
 
     /**
@@ -680,6 +675,9 @@ export class GameManager extends Component {
         this._playerNode = instantiate(playerPrefab);
         this._playerNode.name = 'Player';
 
+        // 设置正确的层级（UI_2D）以确保能被Camera渲染
+        this.setNodeLayerRecursive(this._playerNode, Layers.Enum.UI_2D);
+
         // 设置玩家位置（世界中心 - 2.5D等距视角中心为原点）
         // 注意：玩家位置使用笛卡尔坐标，z轴保持为0
         const worldCenter = new Vec3(0, 0, 0); // 等距视角中心在原点
@@ -694,6 +692,16 @@ export class GameManager extends Component {
 
         // 创建摇杆（UICanvas已在initGameScene中创建）
         this.createJoystick();
+    }
+
+    /**
+     * 递归设置节点及其所有子节点的层级
+     */
+    private setNodeLayerRecursive(node: Node, layer: number): void {
+        node.layer = layer;
+        node.children.forEach(child => {
+            this.setNodeLayerRecursive(child, layer);
+        });
     }
 
     /**
@@ -772,11 +780,7 @@ export class GameManager extends Component {
 
     /**
      * 设置摄像机和Canvas
-     * 只保留UICanvas的Camera，删除其他所有Camera
-     * - UICanvas 用于所有UI元素，使用它自己的Camera
-     * - World 内容直接作为场景子节点
-     *
-     * 版本: 2025-02-26-v9 - 只保留UICanvas Camera
+     * 使用场景中已有的Camera（编辑器中配置）
      */
     private setupCamera(): void {
         const scene = director.getScene();
@@ -785,65 +789,42 @@ export class GameManager extends Component {
             return;
         }
 
-        // ========== 第1步：先创建UICanvas（让它自动创建Camera）==========
-        let uiCanvasNode = scene.getChildByName('UICanvas');
-        if (uiCanvasNode && uiCanvasNode.isValid) {
-            console.log('GameManager: 使用已存在的UICanvas');
-            this._uiCanvas = uiCanvasNode.getComponent(Canvas);
-            // 确保UICanvas有Camera
-            if (!uiCanvasNode.getComponent(Camera)) {
-                console.log('GameManager: UICanvas缺少Camera，添加Camera');
-                const camera = uiCanvasNode.addComponent(Camera);
-                camera.projection = Camera.ProjectionType.ORTHO;
-                camera.orthoHeight = GameConfig.DESIGN_HEIGHT / 2;
-                camera.near = 0.1;
-                camera.far = 10000;
-                camera.visibility = Layers.Enum.UI_2D;
-                camera.priority = 0;
-            }
+        // 查找场景中的Camera节点（尝试多种名称）
+        let cameraNode: Node | null = null;
+        const cameraNames = ['Camera', 'MainCamera', 'Main Camera', 'GameCamera'];
+        for (const name of cameraNames) {
+            cameraNode = scene.getChildByName(name);
+            if (cameraNode) break;
+        }
+        
+        if (cameraNode) {
+            this._cameraNode = cameraNode;
+            console.log('GameManager: 使用场景中的Camera:', cameraNode.name);
         } else {
+            console.warn('GameManager: 未找到Camera节点，尝试查找Camera组件');
+            // 尝试通过 Camera 组件查找
+            const cameras = scene.getComponentsInChildren(Camera);
+            if (cameras.length > 0) {
+                this._cameraNode = cameras[0].node;
+                console.log('GameManager: 通过Camera组件找到节点:', this._cameraNode.name);
+            }
+        }
+
+        // 创建UICanvas（用于UI元素）
+        let uiCanvasNode = scene.getChildByName('UICanvas');
+        if (!uiCanvasNode || !uiCanvasNode.isValid) {
             uiCanvasNode = new Node('UICanvas');
             this._uiCanvas = uiCanvasNode.addComponent(Canvas);
             const uiTransform = uiCanvasNode.addComponent(UITransform);
             uiTransform.setContentSize(GameConfig.DESIGN_WIDTH, GameConfig.DESIGN_HEIGHT);
             uiCanvasNode.layer = Layers.Enum.UI_2D;
             scene.addChild(uiCanvasNode);
-            console.log('GameManager: 创建UICanvas（自动创建Camera）');
+            console.log('GameManager: 创建UICanvas');
+        } else {
+            this._uiCanvas = uiCanvasNode.getComponent(Canvas);
         }
 
-        // 配置UICanvas的Camera - 适配2.5D等距视角
-        const uiCamera = uiCanvasNode.getComponent(Camera);
-        if (uiCamera) {
-            uiCamera.projection = Camera.ProjectionType.ORTHO;
-            // 调整视野范围以显示更多地图（2.5D视角需要更大视野）
-            uiCamera.orthoHeight = GameConfig.DESIGN_HEIGHT / 1.5; // 增加视野范围
-            uiCamera.near = 0.1;
-            uiCamera.far = 10000;
-            // 确保能看到所有层（UI_2D层包含地图和角色）
-            uiCamera.visibility = Layers.Enum.UI_2D;
-            uiCamera.priority = 0;
-
-            // 设置摄像机初始位置到世界中心（等距视角下是原点）
-            // 在2.5D等距视角中，地图以(0,0)为中心分布
-            const worldCenter = new Vec3(0, 0, 1000); // 摄像机在原点上方
-            uiCamera.node.setPosition(worldCenter);
-
-            console.log('GameManager: UICanvas Camera已配置（2.5D等距视角）');
-            console.log(`  - 视野范围: ${uiCamera.orthoHeight}`);
-            console.log(`  - 初始位置: (${worldCenter.x}, ${worldCenter.y}, ${worldCenter.z})`);
-        }
-
-        // ========== 第2步：删除MainCamera和WorldCanvas（保留编辑器Camera）==========
-        this.deleteMainCamera(scene);
-        this.cleanupExtraNodes(scene);
-
-        // 保存Camera节点引用
-        this._cameraNode = uiCamera ? uiCamera.node : null;
-
-        // 注意：World内容直接放在场景下，不需要Canvas
-        this._worldCanvas = null;
-
-        console.log('GameManager: 摄像机设置完成（只保留UICanvas Camera）');
+        console.log('GameManager: 摄像机设置完成');
     }
 
     /**
@@ -914,6 +895,11 @@ export class GameManager extends Component {
      */
     private createCastle(): void {
         const castle = new Node('Castle');
+        castle.layer = Layers.Enum.UI_2D;
+
+        // 添加UITransform
+        const transform = castle.addComponent(UITransform);
+        transform.setContentSize(80, 80);
 
         // 添加Sprite组件并设置城堡贴图
         const sprite = castle.addComponent(Sprite);
@@ -964,6 +950,10 @@ export class GameManager extends Component {
         for (let i = 0; i < monsterTypes.length; i++) {
             const monster = instantiate(monsterPrefab);
             monster.name = `Monster_${monsterTypes[i]}`;
+            
+            // 设置正确的层级（UI_2D）以确保能被Camera渲染
+            this.setNodeLayerRecursive(monster, Layers.Enum.UI_2D);
+            
             monster.setPosition(positions[i]);
 
             // 设置怪物类型
@@ -1001,6 +991,10 @@ export class GameManager extends Component {
         for (let i = 0; i < towerPositions.length; i++) {
             const tower = instantiate(towerPrefab);
             tower.name = `Tower_${i}`;
+            
+            // 设置正确的层级（UI_2D）以确保能被Camera渲染
+            this.setNodeLayerRecursive(tower, Layers.Enum.UI_2D);
+            
             tower.setPosition(towerPositions[i]);
 
             if (this._worldNode) {
